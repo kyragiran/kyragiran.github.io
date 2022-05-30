@@ -1,0 +1,437 @@
+---
+title: "Final assigment"
+output: html_document
+author: Kyra Girán (E28OVN)
+editor_options: 
+  chunk_output_type: console
+---
+#Final assigment
+
+I chose the dataset "Chocolate Ratings" from the 2022/01/18 Tidy Tuesday datasets (https://github.com/rfordatascience/tidytuesday/tree/master/data/2022/2022-01-18)
+
+My idea was, that I would like to build a model, that can help someone planning on establishing a new chocolate brand. They could see which factors influenced the rating that a certain chocolate got. 
+
+M hypothesis is, that the more complex second model will be a significantly better fitting one than the first morel. Moreover, I think cocoa percentage will be a significant predictor in the model, since it can greatly define a chocolate's taste. 
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+
+library(readr)
+library(stringr)
+library(dplyr)
+library(lmtest)
+library(psych)
+library(car)
+library(r2glmm)
+library(lmtest)
+library(jtools)
+library(sandwich)
+library(boot)
+library(lmboot)
+library(lme4)
+library(tidyverse)
+```
+
+##Loading the dataset
+```{r loading dataset, echo=TRUE}
+chocolate <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2022/2022-01-18/chocolate.csv')
+
+```
+
+
+##Data exploration
+
+```{r data exploration, echo=FALSE}
+
+describe(chocolate)
+chocolate %>% 
+  summary()
+
+chocolate %>% 
+  ggplot()+
+  aes(x = rating) +
+  geom_histogram()
+
+chocolate %>% 
+  ggplot()+
+  aes(x = cocoa_percent) +
+  geom_histogram()
+
+chocolate %>% 	
+  ggplot() +	
+  aes(x = rating, y = cocoa_percent) +	
+  geom_point()
+
+chocolate %>% 	
+  ggplot() +	
+  aes(x = rating, y = country_of_bean_origin) +	
+  geom_point()
+
+
+```
+
+##Data alterations
+I have extracted how many different ingredients are there in a chocolate based on the ingredients variable. I might use this variable as a predictor.
+
+```{r ingredient number, echo=TRUE}
+# extracted how many ingredients there are in a given chocolate
+chocolate2 = chocolate %>% 
+  mutate(ingredient_number = as.integer(stringr::str_extract(ingredients, "\\d+")))
+
+```
+
+I created dummy variables for the components of the ingredient variable. I tought that the different ingredients a chocolate migh have or not have can have a great effect on sujective ratings.
+
+```{r ingredient dummues, echo=TRUE}
+
+ingr = chocolate2$ingredients
+
+chocolate3 = chocolate2 %>% 
+  mutate(contains_beans = as.numeric(grepl("B,", ingr))) %>% 
+  mutate(contains_sugar = as.numeric(grepl("S,", ingr))) %>%
+  mutate(contains_cocoabutter = as.numeric(grepl("C", ingr))) %>% 
+  mutate(contains_vanilla = as.numeric(grepl("V", ingr))) %>% 
+  mutate(contains_lecithin = as.numeric(grepl("L", ingr))) %>% 
+  mutate(contains_salt = as.numeric(grepl("Sa", ingr)))
+```
+
+```{r ingredient dummies, echo=TRUE}
+
+ingr = chocolate2$ingredients
+
+chocolate3 = chocolate2 %>% 
+  mutate(contains_beans = as.numeric(grepl("B,", ingr))) %>% 
+  mutate(contains_sugar = as.numeric(grepl("S,", ingr))) %>%
+  mutate(contains_cocoabutter = as.numeric(grepl("C", ingr))) %>% 
+  mutate(contains_vanilla = as.numeric(grepl("V", ingr))) %>% 
+  mutate(contains_lecithin = as.numeric(grepl("L", ingr))) %>% 
+  mutate(contains_salt = as.numeric(grepl("Sa", ingr)))
+```
+
+
+The most prominent characteristic might as well provide some help to determine what influences wether we think a chocolate is tasty or not. I searched the most common characteristic in the dataset and created a dummy variable for that taste. This taste turned out to be the sweetness. 
+```{characteristics, echo=TRUE}
+# Exploring the most prominent characteristics that might help predict the rating.
+#most memorable charactristic split into separate rows
+chocolate4 = chocolate3 %>% 
+  mutate(most_memorable_characteristics=strsplit(most_memorable_characteristics, ",")) %>% 
+  unnest(most_memorable_characteristics)
+
+chocolate4$most_memorable_characteristics <- trimws(chocolate4$most_memorable_characteristics)
+
+levels(chocolate4$most_memorable_characteristics)
+table(chocolate4$most_memorable_characteristics)
+
+important_characteristics = chocolate4 %>% 
+  count(most_memorable_characteristics, sort = TRUE)
+
+chocolate5 = chocolate3 %>% 
+  mutate(sweet_characteristic = as.numeric(grepl("sweet", most_memorable_characteristics)))
+
+# fromatting the cocoa percent variable
+chocolate5 = chocolate5 %>% 
+  mutate_at("cocoa_percent", str_replace, "%", "",) %>% 
+  mutate(cocoa_percent = as.numeric(cocoa_percent)) %>% 
+  mutate(rating = as.numeric(rating)) %>% 
+  
+```
+
+The ideal climate for the cocoa bean tree, Theobroma Cacao eis between 20North to 20 South of the Equator according to many papers, for example Fowler and Coutel (2017). To investigate wether these ideal weather conditions can play a part in determinig the cocoa's and the chocolate's quality I searched for a dataset which contains the latitude of the world's countries. I've found a pretty exhaustive list, but it is not complete, therefore some countries that are in the country_of_bean_origin variable, are missing from it. That is why it is just an approximate variable. 
+I created a dummy variable, where 1 means that the bean's origin country is in the right latitude range, and 0 means that it is not. I added this new variable to the chocolate dataset. 
+
+Fowler, M. S., & Coutel, F. (2017). Cocoa beans: from tree to factory. Beckett's industrial chocolate manufacture and use, 9-49.
+
+
+```{r latitude, include=FALSE}
+mutate(country_of_bean_origin = factor(country_of_bean_origin))
+
+dat = read.csv("https://raw.githubusercontent.com/albertyw/avenews/master/old/data/average-latitude-longitude-countries.csv")
+
+
+result_or <- dat %>% filter(Country == "Australia" |
+                              Country == "Australia"|
+                              Country == "Belize" | 
+                              Country == "Blend"| 
+                              Country == "Bolivia"| 
+                              Country == "Brazil"| 
+                              Country == "Burma"| 
+                              Country == "Cameroon"| 
+                              Country == "Costa Rica"| 
+                              Country == "China"| 
+                              Country == "Colombia"| 
+                              Country == "Congo"| 
+                              Country == "Cuba"|
+                              Country == "Dominican Republic"| 
+                              Country == "DR Congo"| 
+                              Country == "Gabon"| 
+                              Country == "Ecuador"| 
+                              Country == "El Salvador"|
+                              Country == "Fiji"| 
+                              Country == "Ghana"| 
+                              Country == "Grenada"| 
+                              Country == "Guatemala"| 
+                              Country == "Haiti"| 
+                              Country == "Honduras"| 
+                              Country == "India"| 
+                              Country == "Indonesia"|
+                              Country == "Ivory Coast"|
+                              Country == "Jamaica"| 
+                              Country == "Liberia"| 
+                              Country == "Madagascar"| 
+                              Country == "Malaysia"| 
+                              Country == "Martinique"| 
+                              Country == "Mexico"| 
+                              Country == "Nicaragua"|
+                              Country == "Nigeria"| 
+                              Country == "Panama"| 
+                              Country == "Papua New Guinea"| 
+                              Country == "Peru"| 
+                              Country == "Philippines"| 
+                              Country == "Principe"| 
+                              Country == "Puerto Rico"| 
+                              Country == "Samoa"|
+                              Country =="Sao Tome"|
+                              Country == "Sao Tome & Principe"| 
+                              Country == "Sierra Leone"| 
+                              Country == "Solomon Islands"| 
+                              Country == "Sri Lanka"| 
+                              Country == "St. Lucia"| 
+                              Country == "St.Vincent-Grenadines"| 
+                              Country == "Sulawesi"| 
+                              Country == "Sumatra"| 
+                              Country == "Suriname"| 
+                              Country == "Taiwan"| 
+                              Country == "Tanzania"| 
+                              Country == "Thailand"| 
+                              Country == "Tobago"| 
+                              Country == "Togo"| 
+                              Country == "Trinidad"| 
+                              Country == "U.S.A."| 
+                              Country == "Uganda"| 
+                              Country == "Vanuatu"| 
+                              Country == "Venezuela"| 
+                              Country == "Vietnam")
+
+result_or
+
+#filter countries that are placed in the right latitude range
+right_latitude <- result_or %>% 
+  filter(Latitude %in% (-20.00:20.00) )
+
+right_latitude_countries = right_latitude$Country
+
+# dummy variable from right latitude countries
+is_it_right_latitude = ifelse(chocolate5$country_of_bean_origin %in% c( "Bolivia", "Brazil", "Congo", "Cameroon", "Colombia", "Costa Rica", "Dominican Republic", 
+                                                                        "Ecuador", "Fiji", "Gabon", "Ghana", "Honduras", "Haiti", "Indonesia", "India", "Sri Lanka", "Madagascar", "Nigeria",           
+                                                                        "Nicaragua", "Panama", "Peru", "Papua New Guinea", "Philippines", "Solomon Islands",   
+                                                                        "Suriname", "Togo", "Thailand", "Uganda", "Venezuela", "Vietnam", "Vanuatu"), 1, 0)
+
+# combining the new variable with the chocolate dataset
+chocolate6 = cbind(is_it_right_latitude,chocolate5)
+
+
+```
+
+##Building the models
+
+I built two models, the first one only contains the cocoa percent as a predictor, because that is the first thing we see in a packaging or in the shop, so that is the first information we get about that chocolate. I wanted to compare the more complex model to this simple one, to wether the "first impression" is enough or we need a more detailed list to come closer to determine wether a chocolate is tasty or not. 
+
+```{r models, echo=TRUE}
+# two linear regression models
+model1 = lm(rating ~ cocoa_percent,  data = chocolate6) 
+
+chocolate6 %>% 	
+  ggplot() +	
+  aes(x = cocoa_percent, y = rating) +	
+  geom_point()+
+  geom_smooth(method ="lm")
+
+model2 = lm(rating ~ sweet_characteristic + contains_beans +  contains_sugar + contains_cocoabutter + contains_vanilla + contains_lecithin + contains_salt + cocoa_percent  + is_it_right_latitude, data = chocolate6)
+
+```
+
+##Model diagnostics
+
+#Influential outliers
+There are three influential outliers, that should be sliced from the dataset. 
+
+```{r influential outliers, echo=TRUE}
+
+model2%>%
+  plot(which = 5)
+
+model2%>%
+  plot(which = 4)
+
+chocolate6_nooutliers = chocolate6 %>% 	
+  slice(-c(1588, 764, 579))
+
+model3%>%
+  plot(which = 5)
+
+model3%>%
+  plot(which = 4) # there are no more very outstanding outliers
+
+
+```
+
+#Normality of residuals
+
+The model doesn't violate the normality of residuals assumption
+```{r normality, echo=TRUE}
+
+model2 %>% 	
+  plot(which = 2)
+
+residuals_model2 = enframe(residuals(model2))	
+residuals_model2 %>% 	
+  ggplot() +	
+  aes(x = value) +	
+  geom_histogram()
+
+describe(residuals(model2))
+
+
+```
+# Linearity
+
+The cocoa percent came back as significant, so it violates the assumption of linear relationship between each predictor variable and the response variable. To solve this violation, I added the second order term of cocoa percent to the final model, but the assumption violation still remained, so I added the third order term of cocoa percent, and that way the violation did not come up again.
+
+```{r linearity, echo=TRUE}
+
+model2 %>% 
+  residualPlots()
+
+
+```
+#Homoscedasticity
+
+I tested the assumption of equal variance of residuals, but according to the Breusch-Pagan test the model violates this assumption. I tried to take the dependent variable's log transformed version but the model still violated the assumption of homoscedasticity. Therefore, I will use a robust standard error predicting method such as the Huber-White Sandwich in the final analysis.
+
+```{r homoscedasticity, echo=TRUE}
+
+model2 %>% 
+  plot(which = 3)
+
+
+model2 %>% 
+  bptest()
+
+```
+
+#Multicollinearity
+
+The VIF value is not acceptable in the case of contains_sugar variable and contains_cocoabutter. Therefore I will exclude contains_cocoabutter. 
+
+
+```{r multicollinearity, echo=TRUE}
+
+model2 %>% 
+  vif
+
+```
+
+## Final models
+
+After checking whether the model violates any of the assumptions of the linear regression, I created the final models which hopefully won't violate any of the assumptions.
+
+```{r model3, echo=TRUE}
+
+model1_1 = model1 = lm(rating ~ cocoa_percent + I(cocoa_percent^2) + I(cocoa_percent^3),
+                     data = chocolate6_nooutliers) 
+
+model3 = lm(rating ~ sweet_characteristic + contains_beans +  contains_sugar + contains_vanilla + contains_lecithin + contains_salt + cocoa_percent + I(cocoa_percent^2) + I(cocoa_percent^3) + is_it_right_latitude, data = chocolate6_nooutliers)
+
+```
+
+#Re-checking the assumptions
+
+```{r re-check, echo=TRUE}
+
+#Influential outliers
+
+model3%>%
+  plot(which = 5)
+
+model3%>%
+  plot(which = 4)
+
+#Normality
+
+model3 %>% 	
+  plot(which = 2)
+
+residuals_model3 = enframe(residuals(model3))	
+residuals_model3 %>% 	
+  ggplot() +	
+  aes(x = value) +	
+  geom_histogram()
+
+describe(residuals(model3))
+
+
+#Linearity solution
+
+model3 %>% 
+  residualPlots()
+
+#Homoscedasticity
+
+model3 %>% 
+  plot(which = 3)
+
+model3 %>% 
+  bptest()
+
+#Multicollinearity
+
+model3 %>% 
+  vif()
+```
+
+Model3 only violates the assumption of homoscedasticity, but I will use a robust standard error method for that.
+
+## Results
+
+```{r results, echo=TRUE}
+summary(model3)
+
+#library(devtools)
+#install_github("DoseResponse/drc")
+
+# compute robust SE and p-values	
+model3_sandwich_test = coeftest(model3, vcov = vcovHC, type = "HC")	
+
+model3_sandwich_test 	
+	
+model3_sandwich_test_se = unclass(model3_sandwich_test)[,2]	
+	
+# compute robust confidence intervals	
+CI95_lb_robust = coef(model3)-1.96*model3_sandwich_test_se
+
+CI95_ub_robust = coef(model3)+1.96*model3_sandwich_test_se	
+	
+cbind(model3_sandwich_test, CI95_lb_robust, CI95_ub_robust)	
+
+summ(model3,
+  robust = getOption("summ-robust", TRUE))
+summ(model1_1)
+```
+
+```{r comparing the two models, echo=TRUE}
+
+AIC(model1_1)
+AIC(model3)
+
+```
+
+According to the AIC scores, the more complex model is significantly better fitting than the simpler model. Also, the complex model explains 10,1% of the variance, while the simple model only explains 6%. So the first hypothesis turned out to be true.
+
+In model3 the predictor indicating whether a chocolate was sweet (p=0,00), if it contains beans (p=0,00), sugar (p=0,00) and vanilla (p=0,00), and the cocoa percent (p=0,04) turned out to be significant predictors of the ratings. So the second hypothesis also turned out to be true, since cocoa_percent in a significant predictor. 
+
+All in all, I would advise someone who plans to open a chocolate factory, to keep an eye on the sweetness, the sugar content, the vanilla extract content and the cocoa percent of the chocolate. With the addition, that the less sweet tasting and less vanilla tasting a chocolate is, the better rating it will get.
