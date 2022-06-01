@@ -1,4 +1,11 @@
 ---
+title: "final_project_statistical_programming.R"
+author: "Girán Kyra"
+date: '2022-06-01'
+output: html_document
+---
+
+---
 title: "Final assigment"
 output: html_document
 author: Kyra Girán (E28OVN)
@@ -14,19 +21,13 @@ My idea was, that I would like to build a model, that can help someone planning 
 M hypothesis is, that the more complex second model will be a significantly better fitting one than the first morel. Moreover, I think cocoa percentage will be a significant predictor in the model, since it can greatly define a chocolate's taste. 
 
 ```{r setup, include=FALSE}
+options(repos = list(CRAN="http://cran.rstudio.com/"))
 
 knitr::opts_chunk$set(
-	echo = TRUE,
-	message = FALSE,
-	warning = FALSE
-)
+	echo = TRUE)
 
-#remove.packages(c("readr"))
-#install.packages('Rcpp', dependencies = TRUE)
-#install.packages('readr', dependencies = TRUE)
 library(readr)
 library(stringr)
-#install.packages("dplyr")
 library(dplyr)
 library(lmtest)
 library(psych)
@@ -53,7 +54,7 @@ chocolate <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/
 
 ```{r data exploration, echo=FALSE}
 
-describe(chocolate)
+
 chocolate %>% 
   summary()
 
@@ -65,7 +66,7 @@ chocolate %>%
 chocolate %>% 
   ggplot()+
   aes(x = cocoa_percent) +
-  geom_histogram()
+  geom_bar()
 
 chocolate %>% 	
   ggplot() +	
@@ -92,19 +93,6 @@ chocolate2 = chocolate %>%
 
 I created dummy variables for the components of the ingredient variable. I tought that the different ingredients a chocolate migh have or not have can have a great effect on sujective ratings.
 
-```{r ingredient dummues, echo=TRUE}
-
-ingr = chocolate2$ingredients
-
-chocolate3 = chocolate2 %>% 
-  mutate(contains_beans = as.numeric(grepl("B,", ingr))) %>% 
-  mutate(contains_sugar = as.numeric(grepl("S,", ingr))) %>%
-  mutate(contains_cocoabutter = as.numeric(grepl("C", ingr))) %>% 
-  mutate(contains_vanilla = as.numeric(grepl("V", ingr))) %>% 
-  mutate(contains_lecithin = as.numeric(grepl("L", ingr))) %>% 
-  mutate(contains_salt = as.numeric(grepl("Sa", ingr)))
-```
-
 ```{r ingredient dummies, echo=TRUE}
 
 ingr = chocolate2$ingredients
@@ -120,9 +108,10 @@ chocolate3 = chocolate2 %>%
 
 
 The most prominent characteristic might as well provide some help to determine what influences wether we think a chocolate is tasty or not. I searched the most common characteristic in the dataset and created a dummy variable for that taste. This taste turned out to be the sweetness. 
-```{characteristics, echo=TRUE}
+```{r characteristics, echo=TRUE}
 # Exploring the most prominent characteristics that might help predict the rating.
 #most memorable charactristic split into separate rows
+
 chocolate4 = chocolate3 %>% 
   mutate(most_memorable_characteristics=strsplit(most_memorable_characteristics, ",")) %>% 
   unnest(most_memorable_characteristics)
@@ -142,7 +131,7 @@ chocolate5 = chocolate3 %>%
 chocolate5 = chocolate5 %>% 
   mutate_at("cocoa_percent", str_replace, "%", "",) %>% 
   mutate(cocoa_percent = as.numeric(cocoa_percent)) %>% 
-  mutate(rating = as.numeric(rating)) %>% 
+  mutate(rating = as.numeric(rating)) 
   
 ```
 
@@ -153,7 +142,9 @@ Fowler, M. S., & Coutel, F. (2017). Cocoa beans: from tree to factory. Beckett's
 
 
 ```{r latitude, include=FALSE}
-mutate(country_of_bean_origin = factor(country_of_bean_origin))
+
+chocolate5 = chocolate5 %>% 
+  mutate(country_of_bean_origin = factor(country_of_bean_origin))
 
 dat = read.csv("https://raw.githubusercontent.com/albertyw/avenews/master/old/data/average-latitude-longitude-countries.csv")
 
@@ -275,12 +266,6 @@ model2%>%
 
 chocolate6_nooutliers = chocolate6 %>% 	
   slice(-c(1588, 764, 579))
-
-model3%>%
-  plot(which = 5)
-
-model3%>%
-  plot(which = 4) # there are no more very outstanding outliers
 
 
 ```
