@@ -21,14 +21,19 @@ knitr::opts_chunk$set(
 	warning = FALSE
 )
 
+#remove.packages(c("readr"))
+#install.packages('Rcpp', dependencies = TRUE)
+#install.packages('readr', dependencies = TRUE)
 library(readr)
 library(stringr)
+#install.packages("dplyr")
 library(dplyr)
 library(lmtest)
 library(psych)
 library(car)
 library(r2glmm)
 library(lmtest)
+#install.packages("jtools")
 library(jtools)
 library(sandwich)
 library(boot)
@@ -55,7 +60,7 @@ chocolate %>%
 chocolate %>% 
   ggplot()+
   aes(x = rating) +
-  geom_histogram()
+  geom_bar()
 
 chocolate %>% 
   ggplot()+
